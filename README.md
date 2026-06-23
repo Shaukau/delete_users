@@ -3,8 +3,8 @@ Import-Module ActiveDirectory
 $CsvPath = "C:\Scripts\feminisation_postes.csv"
 $LogPath = "C:\Scripts\logs_feminisation_postes.txt"
 
-# Mode test : $true = affiche sans modifier
-# Mode réel : $false = applique dans l'AD
+# $true = test sans modifier l'AD
+# $false = modification réelle
 $ModeTest = $true
 
 function Convert-ToFeminineTitle {
@@ -12,36 +12,18 @@ function Convert-ToFeminineTitle {
         [string]$Title
     )
 
-    $NewTitle = $Title
+    $NewTitle = $Title.Trim()
 
-    $Rules = @{
-        "Directeur" = "Directrice"
-        "Directeur adjoint" = "Directrice adjointe"
-        "Directeur commercial" = "Directrice commerciale"
-        "Technicien" = "Technicienne"
-        "Technicien informatique" = "Technicienne informatique"
-        "Administrateur" = "Administratrice"
-        "Administrateur système" = "Administratrice système"
-        "Développeur" = "Développeuse"
-        "Commercial" = "Commerciale"
-        "Assistant" = "Assistante"
-        "Assistant de direction" = "Assistante de direction"
-        "Contrôleur de gestion" = "Contrôleuse de gestion"
-        "Conseiller en fiscalité" = "Conseillère en fiscalité"
-        "Chargé de communication" = "Chargée de communication"
-        "Responsable communication" = "Responsable communication"
-        "Responsable recrutement" = "Responsable recrutement"
-        "Agent RH" = "Agente RH"
-        "Juriste" = "Juriste"
-        "Comptable" = "Comptable"
-        "Community manager" = "Community manager"
-    }
-
-    foreach ($Rule in $Rules.GetEnumerator()) {
-        if ($Title -eq $Rule.Key) {
-            $NewTitle = $Rule.Value
-        }
-    }
+    $NewTitle = $NewTitle -replace "^Directeur\b", "Directrice"
+    $NewTitle = $NewTitle -replace "^Technicien\b", "Technicienne"
+    $NewTitle = $NewTitle -replace "^Administrateur\b", "Administratrice"
+    $NewTitle = $NewTitle -replace "^Développeur\b", "Développeuse"
+    $NewTitle = $NewTitle -replace "^Commercial\b", "Commerciale"
+    $NewTitle = $NewTitle -replace "^Assistant\b", "Assistante"
+    $NewTitle = $NewTitle -replace "^Contrôleur\b", "Contrôleuse"
+    $NewTitle = $NewTitle -replace "^Conseiller\b", "Conseillère"
+    $NewTitle = $NewTitle -replace "^Chargé\b", "Chargée"
+    $NewTitle = $NewTitle -replace "^Agent RH\b", "Agente RH"
 
     return $NewTitle
 }
@@ -51,7 +33,6 @@ $Users = Import-Csv -Path $CsvPath -Delimiter ";"
 foreach ($User in $Users) {
 
     $Sam = $User.SamAccountName
-    $OldTitleFromCsv = $User.Title
     $Marker = $User.PosteFeminise
 
     if ([string]::IsNullOrWhiteSpace($Marker)) {
@@ -60,28 +41,30 @@ foreach ($User in $Users) {
     }
 
     try {
-        $ADUser = Get-ADUser -Identity $Sam -Properties Title,Description
+        $ADUser = Get-ADUser -Identity $Sam -Properties Title,Department
 
         $AncienPoste = $ADUser.Title
+        $Departement = $ADUser.Department
         $NouveauPoste = Convert-ToFeminineTitle -Title $AncienPoste
 
         Write-Host "Utilisateur : $Sam" -ForegroundColor Cyan
-        Write-Host "Ancien poste : $AncienPoste"
-        Write-Host "Nouveau poste : $NouveauPoste"
+        Write-Host "Ancien Title : $AncienPoste"
+        Write-Host "Nouveau Title : $NouveauPoste"
+        Write-Host "Department conserve : $Departement"
 
         if ($AncienPoste -eq $NouveauPoste) {
-            Write-Host "Aucune règle de féminisation appliquée pour ce poste" -ForegroundColor Yellow
+            Write-Host "Aucune regle de feminisation appliquee pour ce poste" -ForegroundColor Yellow
             continue
         }
 
         if ($ModeTest -eq $false) {
+
+            # Modification uniquement du champ Title
             Set-ADUser -Identity $Sam -Title $NouveauPoste
 
-            Set-ADUser -Identity $Sam -Description "Poste feminise suite a la regle RH - Ancien poste : $AncienPoste - Nouveau poste : $NouveauPoste"
+            Add-Content $LogPath "[$(Get-Date)] OK : $Sam - Title : $AncienPoste -> $NouveauPoste - Department conserve : $Departement"
 
-            Add-Content $LogPath "[$(Get-Date)] OK : $Sam - Ancien poste : $AncienPoste - Nouveau poste : $NouveauPoste"
-
-            Write-Host "Modification appliquee pour $Sam" -ForegroundColor Green
+            Write-Host "Modification appliquee uniquement sur le Title" -ForegroundColor Green
         }
         else {
             Write-Host "MODE TEST : aucune modification appliquee" -ForegroundColor Yellow
